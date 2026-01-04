@@ -803,10 +803,11 @@
     <h3 id="deleteModalTitle">🗑️ Delete Item</h3>
     <div class="folder-form">
       <p class="delete-warning">⚠️ This action cannot be undone!</p>
+      <div id="deleteModalError" style="display: none; padding: 10px; background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 4px; margin-bottom: 10px;"></div>
       <p class="file-info" id="deleteModalQuestion">Are you sure you want to delete:</p>
       <p class="delete-item-name" id="deleteItemName" style="display: none;"></p>
       <div class="delete-items-list" id="deleteItemsList" style="display: none;"></div>
-      <button class="delete-btn-confirm" onclick="confirmDelete()">Delete</button>
+      <button class="delete-btn-confirm" onclick="confirmDelete()" id="deleteConfirmBtn">Delete</button>
       <button class="delete-btn-cancel" onclick="closeDeleteModal()">Cancel</button>
     </div>
   </div>
@@ -1420,12 +1421,14 @@ function performMultipleMoves(items, destFolder) {
         <div id="delete-progress-bar"><div id="delete-progress-fill"></div></div>
         <div id="delete-progress-text"></div>
       </div>
+      <button id="move-progress-close" class="delete-btn-cancel" style="display: none; margin-top: 15px;">Close</button>
     </div>
   `;
   document.body.appendChild(progressOverlay);
 
   const progressFill = document.getElementById('delete-progress-fill');
   const progressText = document.getElementById('delete-progress-text');
+  const closeBtn = document.getElementById('move-progress-close');
   progressFill.style.backgroundColor = '#3498db';
 
   let currentIndex = 0;
@@ -1476,14 +1479,15 @@ function performMultipleMoves(items, destFolder) {
         }, 1000);
       } else {
         progressFill.style.backgroundColor = '#e74c3c';
-        const failedList = failedMoves.map(f => f.name).join(', ');
-        progressText.textContent = `${items.length - failedMoves.length}/${items.length} moved. Failed: ${failedList}`;
+        const errorDetails = failedMoves.map(f => `${f.name}: ${f.error}`).join('<br>');
+        progressText.innerHTML = `${items.length - failedMoves.length}/${items.length} moved successfully.<br><br><strong>Failed items:</strong><br>${errorDetails}`;
         
-        setTimeout(() => {
+        // Show close button for user to dismiss
+        closeBtn.style.display = 'block';
+        closeBtn.onclick = () => {
           document.body.removeChild(progressOverlay);
-          alert(`Failed to move: ${failedList}\n\nPlease try again or check server logs.`);
           hydrate();
-        }, 3000);
+        };
       }
       return;
     }
@@ -1576,15 +1580,26 @@ function performMultipleMoves(items, destFolder) {
 
   function closeDeleteModal() {
     document.getElementById('deleteModal').classList.remove('open');
+    document.getElementById('deleteModalError').style.display = 'none';
+    document.getElementById('deleteConfirmBtn').disabled = false;
   }
 
   function confirmDelete() {
+    const errorDiv = document.getElementById('deleteModalError');
+    const confirmBtn = document.getElementById('deleteConfirmBtn');
+    
+    // Hide any previous error
+    errorDiv.style.display = 'none';
+    
     if (itemsToDelete.length === 1) {
       // Single item - simple delete
       const item = itemsToDelete[0];
       const formData = new FormData();
       formData.append('path', item.path);
       formData.append('type', item.type);
+
+      // Disable button during request
+      confirmBtn.disabled = true;
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/delete', true);
@@ -1594,14 +1609,18 @@ function performMultipleMoves(items, destFolder) {
           closeDeleteModal();
           hydrate();
         } else {
-          alert('Failed to delete: ' + xhr.responseText);
-          closeDeleteModal();
+          // Show error in modal
+          errorDiv.textContent = xhr.responseText || 'Failed to delete item';
+          errorDiv.style.display = 'block';
+          confirmBtn.disabled = false;
         }
       };
 
       xhr.onerror = function() {
-        alert('Failed to delete - network error');
-        closeDeleteModal();
+        // Show error in modal
+        errorDiv.textContent = 'Failed to delete - network error';
+        errorDiv.style.display = 'block';
+        confirmBtn.disabled = false;
       };
 
       xhr.send(formData);
@@ -1623,12 +1642,14 @@ function performMultipleMoves(items, destFolder) {
           <div id="delete-progress-bar"><div id="delete-progress-fill"></div></div>
           <div id="delete-progress-text"></div>
         </div>
+        <button id="delete-progress-close" class="delete-btn-cancel" style="display: none; margin-top: 15px;">Close</button>
       </div>
     `;
     document.body.appendChild(progressOverlay);
 
     const progressFill = document.getElementById('delete-progress-fill');
     const progressText = document.getElementById('delete-progress-text');
+    const closeBtn = document.getElementById('delete-progress-close');
 
     let currentIndex = 0;
     const failedDeletes = [];
@@ -1674,14 +1695,15 @@ function performMultipleMoves(items, destFolder) {
           }, 1000);
         } else {
           progressFill.style.backgroundColor = '#e74c3c';
-          const failedList = failedDeletes.map(f => f.name).join(', ');
-          progressText.textContent = `${items.length - failedDeletes.length}/${items.length} deleted. Failed: ${failedList}`;
+          const errorDetails = failedDeletes.map(f => `${f.name}: ${f.error}`).join('<br>');
+          progressText.innerHTML = `${items.length - failedDeletes.length}/${items.length} deleted successfully.<br><br><strong>Failed items:</strong><br>${errorDetails}`;
           
-          setTimeout(() => {
+          // Show close button for user to dismiss
+          closeBtn.style.display = 'block';
+          closeBtn.onclick = () => {
             document.body.removeChild(progressOverlay);
-            alert(`Failed to delete: ${failedList}\n\nPlease try again or check server logs.`);
             hydrate();
-          }, 3000);
+          };
         }
         return;
       }
